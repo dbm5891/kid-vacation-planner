@@ -1,0 +1,12 @@
+{
+  "name": "kid-vacation-planner",
+  "version": "1.0.0",
+  "description": "Kid vacation planner web app",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT"
+}
