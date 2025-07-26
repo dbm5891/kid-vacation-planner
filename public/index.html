@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Kid Vacation Planner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50">
+  <header class="bg-gradient-to-r from-indigo-500 to-purple-600 py-12 text-center">
+    <h1 class="text-5xl font-extrabold text-white">Kid Vacation Planner</h1>
+    <p class="text-xl text-white mt-2">Find kid-friendly activities anywhere</p>
+  </header>
+  <main class="container mx-auto px-4">
+    <div id="app"></div>
+  </main>
+  <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel" data-presets="react,typescript">
+    const { useState, useRef } = React;
+
+    type Activity = { name: string; category: string; lat: number; lon: number; distance?: number; };
+
+    const categories = [
+      { key: 'playground', label: 'Playgrounds', color: 'bg-yellow-500' },
+      { key: 'park', label: 'Parks', color: 'bg-green-500' },
+      { key: 'theme_park', label: 'Theme Parks', color: 'bg-pink-500' },
+      { key: 'zoo', label: 'Zoos', color: 'bg-indigo-500' },
+      { key: 'museum', label: 'Museums', color: 'bg-blue-500' },
+      { key: 'water_park', label: 'Water Parks', color: 'bg-teal-500' },
+    ];
+
+    const iconPaths: Record<string,string> = {
+      playground: 'M4 20h16M5 20V9l3-3 4 6 4-3 5 8M4 9h3m0-3h2m-2 3h6',
+      park: 'M12 2a7 7 0 00-7 7c0 1.94.78 3.68 2.05 4.95L12 22l4.95-8.05A7 7 0 0012 2z',
+      theme_park: 'M4 20h16M4 16h16M3 3l1.5 4.5L6 3l1.5 4.5L9 3l1.5 4.5L12 3l1.5 4.5L15 3l1.5 4.5L18 3l1.5 4.5',
+      zoo: 'M12 2l9 7-9 13-9-13 9-7z',
+      museum: 'M6 22h12M6 22V8m12 14V8M3 8l9-5 9 5',
+      water_park: 'M3 18s1.5-2 4.5-2 4.5 2 4.5 2 1.5-2 4.5-2 4.5 2 4.5 2V3H3v15z'
+    };
+
+    function CategoryIcon({ category }: { category: string }) {
+      return (
+        <svg className="w-5 h-5 mr-1 inline-block" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path d={iconPaths[category] || ''} strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    }
+
+    function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+      const toRad = (v: number) => v * Math.PI / 180;
+      const R = 6371;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+      return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    const App: React.FC = () => {
+      const [city, setCity] = useState('');
+      const [selected, setSelected] = useState<string[]>([]);
+      const [radius, setRadius] = useState(10);
+      const [activities, setActivities] = useState<Activity[]>([]);
+      const [message, setMessage] = useState('');
+      const [loading, setLoading] = useState(false);
+      const resultsRef = useRef<HTMLDivElement>(null);
+
+      const toggleCategory = (key: string) => {
+        setSelected(selected.includes(key) ? selected.filter(c => c !== key) : [...selected, key]);
+      };
+
+      const search = async () => {
+        if (!city.trim()) { setMessage('Please enter a location.'); return; }
+        if (selected.length === 0) { setMessage('Please select at least one category.'); return; }
+        setLoading(true);
+        setMessage('');
+        setActivities([]);
+        try {
+          const geoRes = await fetch(`/api/geocode?city=${encodeURIComponent(city)}`);
+          const geo = await geoRes.json();
+          const actRes = await fetch(`/api/activities?lat=${geo.lat}&lon=${geo.lon}&radius=${radius * 1000}&categories=${selected.join(',')}`);
+          const acts: Activity[] = await actRes.json();
+          const withDist = acts.map(a => ({...a, distance: haversine(geo.lat, geo.lon, a.lat, a.lon)}));
+          setActivities(withDist);
+          if (withDist.length === 0) setMessage('No activities found.');
+          setTimeout(() => {
+            resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }, 100);
+        } catch (err) {
+          setMessage('An error occurred while fetching data.');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      return (
+        <div>
+          <div className="relative max-w-3xl mx-auto -mt-16 bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-2xl font-semibold mb-4">Plan your trip</h2>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Destination</label>
+              <input
+                type="text"
+                value={city}
+                onChange={e => setCity(e.target.value)}
+                placeholder="Enter a city or address"
+                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring focus:border-blue-300"
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Categories</label>
+              <div className="flex flex-wrap gap-2">
+                {categories.map(cat => {
+                  const selectedCat = selected.includes(cat.key);
+                  return (
+                    <button key={cat.key}
+                      type="button"
+                      onClick={() => toggleCategory(cat.key)}
+                      className={`flex items-center px-3 py-1 rounded-full text-sm border ${selectedCat ? cat.color + ' text-white' : 'bg-white text-gray-600 border-gray-300'} transition`}
+                    >
+                      <CategoryIcon category={cat.key} />
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mb-6">
+              <label className="block text-sm font-medium mb-1">Search radius: {radius} km</label>
+              <input
+                type="range"
+                min="1"
+                max="50"
+                step="1"
+                value={radius}
+                onChange={e => setRadius(parseInt(e.target.value))}
+                className="w-full"
+              />
+            </div>
+            <button
+              onClick={search}
+              disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md transition disabled:opacity-50 flex items-center justify-center"
+            >
+              {loading && <svg className="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" stroke="white" strokeWidth="4" strokeLinecap="round" fill="none" />
+                <path d="M2 12a10 10 0 0010 10" stroke="white" strokeWidth="4" strokeLinecap="round" fill="none" />
+              </svg>}
+              {loading ? 'Searching...' : 'Search'}
+            </button>
+            {message && <p className="mt-4 text-center text-red-600">{message}</p>}
+          </div>
+          <div ref={resultsRef} className="mt-8">
+            {activities.length > 0 && (
+              <div>
+                <h3 className="text-xl font-semibold mb-4">Results</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {activities.map((act, idx) => (
+                    <div key={idx} className="bg-white rounded-lg shadow-md p-4 hover:shadow-lg transition">
+                      <h4 className="text-lg font-semibold mb-1">{act.name}</h4>
+                      <p className={`inline-block px-2 py-1 text-xs rounded-full ${categories.find(c => c.key === act.category)?.color || 'bg-gray-400'} text-white mb-2`}>
+                        {categories.find(c => c.key === act.category)?.label || act.category}
+                      </p>
+                      <p className="text-sm text-gray-600 mb-2">Distance: {act.distance?.toFixed(2)} km</p>
+                      <a href={`https://www.openstreetmap.org/?mlat=${act.lat}&mlon=${act.lon}&zoom=18`} target="_blank" className="text-blue-600 underline text-sm">View on map</a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    ReactDOM.render(<App />, document.getElementById('app'));
+  </script>
+</body>
+</html>
